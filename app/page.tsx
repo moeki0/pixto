@@ -565,7 +565,11 @@ function EditorApp() {
               onCellHeight={setCellHeight}
               alpha={alpha}
               onAlpha={setAlpha}
-              onClear={() => setFullGrid(makeEmptyGrid(rows, cols))}
+              onClear={() => {
+                setFullGrid(makeEmptyGrid(rows, cols));
+                setPalette([]);
+                setSelected(0);
+              }}
             />
             <PixelGrid
               rows={rows}
