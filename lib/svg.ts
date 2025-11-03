@@ -20,44 +20,126 @@ export function sanitizeColor(input: string | null | undefined, fallback = '#2c7
   return ok ? s : fallback
 }
 
-type Seg = { y0: number; y1: number }
+type Seg = { y0: number; y1: number; openEnd?: boolean; colorLabel?: string }
 
-export function parseData(dataStr: string | null): Seg[][] {
+export function parseData(dataStr: string | null): { cols: Seg[][]; colDefaults: (string | undefined)[] } {
   if (dataStr == null) throw new Error('data is required')
-  const tokens = dataStr.split(',').map((t) => t.trim())
-  if (tokens.length === 0) return []
+  let s = String(dataStr).trim()
+  if (s.endsWith('.svg')) s = s.slice(0, -4)
+  if (s.endsWith('.png')) s = s.slice(0, -4)
+
+  const useV1 = s.includes(':') || s.includes('|')
   const cols: Seg[][] = []
-  for (const tok of tokens) {
-    if (tok === '') { cols.push([]); continue }
-    const parts = tok.split('|').map((p) => p.trim()).filter(Boolean)
-    if (!parts.length) { cols.push([]); continue }
+  const colDefaults: (string | undefined)[] = []
+
+  if (useV1) {
+    const tokens = s.split(',')
+    for (const tokRaw of tokens) {
+      const tok = tokRaw.trim()
+      if (tok === '') { cols.push([]); continue }
+      const parts = tok.split('|').map((p) => p.trim()).filter(Boolean)
+      if (!parts.length) { cols.push([]); continue }
+      const segs: Seg[] = []
+      for (const part of parts) {
+        let y0: number
+        let y1: number
+        let openEnd = false
+        if (part.includes(':')) {
+          const [a, b] = part.split(':')
+          const hasA = a !== ''
+          const hasB = b !== ''
+          if (!hasA && !hasB) throw new Error()
+          if (hasA && !hasB) {
+            const ya = Number(a)
+            if (!Number.isFinite(ya)) throw new Error()
+            y0 = ya
+            y1 = ya
+            openEnd = true
+          } else {
+            const ya = hasA ? Number(a) : 1
+            const yb = Number(b)
+            if (!Number.isFinite(ya) || !Number.isFinite(yb)) throw new Error()
+            y0 = Math.min(ya, yb)
+            y1 = Math.max(ya, yb)
+          }
+        } else {
+          const y = Number(part)
+          if (!Number.isFinite(y)) throw new Error()
+          y0 = y
+          y1 = y
+        }
+        if (y0 < 1 || y1 < 1) throw new Error()
+        if (y1 < y0) throw new Error()
+        segs.push({ y0, y1, openEnd })
+      }
+      cols.push(segs)
+      colDefaults.push(undefined)
+    }
+    return { cols, colDefaults }
+  }
+
+  // v2: '/' for columns, '_' for segments, '-' for range
+  const colTokens = s.split('/')
+  for (const c of colTokens) {
+    const col = c.trim()
+    if (col === '') { cols.push([]); continue }
+    const rawTokens = col.split('_').map((p) => p.trim()).filter(Boolean)
+    let segTokens = rawTokens
+    let colDefault: string | undefined = undefined
+    if (segTokens.length && segTokens[0].startsWith('~')) {
+      const lab = segTokens[0].slice(1).trim()
+      if (!lab) throw new Error('empty column color label after ~')
+      colDefault = lab
+      segTokens = segTokens.slice(1)
+    }
     const segs: Seg[] = []
-    for (const part of parts) {
+    for (const stRaw of segTokens) {
+      const st = stRaw
       let y0: number
       let y1: number
-      if (part.includes(':')) {
-        const [a, b] = part.split(':')
+      let openEnd = false
+      let colorLabel: string | undefined = undefined
+      let base = st
+      if (st.includes('.')) {
+        const dotIdx = st.lastIndexOf('.')
+        base = st.slice(0, dotIdx)
+        colorLabel = st.slice(dotIdx + 1)
+        if (!colorLabel) throw new Error('empty color label after .')
+      }
+      if (base.includes('-')) {
+        const idx = base.indexOf('-')
+        const a = base.slice(0, idx)
+        const b = base.slice(idx + 1)
         const hasA = a !== ''
         const hasB = b !== ''
-        if (!hasB) throw new Error(`invalid data token: ${part}`)
-        const ya = hasA ? Number(a) : 1
-        const yb = Number(b)
-        if (!Number.isFinite(ya) || !Number.isFinite(yb)) throw new Error(`invalid data token: ${part}`)
-        y0 = Math.min(ya, yb)
-        y1 = Math.max(ya, yb)
+        if (!hasA && !hasB) throw new Error()
+        if (hasA && !hasB) {
+          const ya = Number(a)
+          if (!Number.isFinite(ya)) throw new Error()
+          y0 = ya
+          y1 = ya
+          openEnd = true
+        } else {
+          const ya = hasA ? Number(a) : 1
+          const yb = Number(b)
+          if (!Number.isFinite(ya) || !Number.isFinite(yb)) throw new Error()
+          y0 = Math.min(ya, yb)
+          y1 = Math.max(ya, yb)
+        }
       } else {
-        const y = Number(part)
-        if (!Number.isFinite(y)) throw new Error(`invalid data token: ${part}`)
-        y0 = 1
+        const y = Number(base)
+        if (!Number.isFinite(y)) throw new Error()
+        y0 = y
         y1 = y
       }
-      if (y0 < 1 || y1 < 1) throw new Error(`y must be >= 1: ${part}`)
-      if (y1 < y0) throw new Error(`invalid range: ${part}`)
-      segs.push({ y0, y1 })
+      if (y0 < 1 || y1 < 1) throw new Error()
+      if (y1 < y0) throw new Error()
+      segs.push({ y0, y1, openEnd, colorLabel })
     }
     cols.push(segs)
+    colDefaults.push(colDefault)
   }
-  return cols
+  return { cols, colDefaults }
 }
 
 export function buildSVG(params: {
@@ -71,18 +153,22 @@ export function buildSVG(params: {
   xGap?: number
   yLabels: Record<number, string>
   xLabels: Record<number, string>
+  palette?: Record<string, string>
+  paletteDefaultKey?: string | null
 }): string {
-  const { direction, data, width, height, color, alpha = 0.35, yGap = 0, xGap = 0, yLabels, xLabels } = params
+  const { direction, data, width, height, color, alpha = 1, yGap = 0, xGap = 0, yLabels, xLabels, palette = {}, paletteDefaultKey = null } = params
   if (!direction || (direction !== 'right' && direction !== 'bottom')) {
     throw new Error("direction must be 'right' or 'bottom'")
   }
-  if (!data) throw new Error('data is required')
+  if (data == null) throw new Error('data is required')
   const cw = Number(width)
   const ch = Number(height)
   if (!Number.isFinite(cw) || cw <= 0) throw new Error('width must be a positive number')
   if (!Number.isFinite(ch) || ch <= 0) throw new Error('height must be a positive number')
 
-  const cols = parseData(data)
+  const parsed = parseData(data)
+  const cols = parsed.cols
+  const colDefaults = parsed.colDefaults
   const maxX = cols.length
   let maxY = 1
   for (const segs of cols) {
@@ -107,17 +193,35 @@ export function buildSVG(params: {
   const py = (y: number) => contentHeight - (y * ch + (y - 1) * rg)
 
   const normCols: Seg[][] = cols.map((segs) =>
-    segs.map((s) => ({ y0: Math.max(1, Math.floor(s.y0)), y1: Math.max(1, Math.floor(s.y1)) }))
+    segs.map((s) => ({ y0: Math.max(1, Math.floor(s.y0)), y1: Math.max(1, Math.floor(s.y1)), colorLabel: s.colorLabel }))
   )
-  const baseFill = sanitizeColor(color, '#2c7be5')
+  // Resolve palette colors
+  const palResolved: Record<string, string> = {}
+  let firstKey: string | null = null
+  for (const k of Object.keys(palette)) {
+    if (firstKey == null) firstKey = k
+    palResolved[k] = sanitizeColor(palette[k], '#2c7be5')
+  }
+  const fallbackBase = sanitizeColor(color, '#2c7be5')
+  const defaultKey = paletteDefaultKey || firstKey
   const cellElems: string[] = []
   for (let xi = 1; xi <= maxX; xi++) {
     const segs = normCols[xi - 1] || []
+    const colDef = colDefaults[xi - 1]
     for (const r of segs) {
       for (let yi = r.y0; yi <= r.y1; yi++) {
         const rx = px(xi)
         const ry = py(yi)
-        cellElems.push(`<rect x="${rx}" y="${ry}" width="${cw}" height="${ch}" fill="${baseFill}" stroke="none"/>`)
+        // Resolve fill color: segment colorLabel > column default > palette default first > fallback
+        let fill = fallbackBase
+        if (r.colorLabel && palResolved[r.colorLabel]) {
+          fill = palResolved[r.colorLabel]
+        } else if (colDef && palResolved[colDef]) {
+          fill = palResolved[colDef]
+        } else if (defaultKey && palResolved[defaultKey]) {
+          fill = palResolved[defaultKey]
+        }
+        cellElems.push(`<rect x="${rx}" y="${ry}" width="${cw}" height="${ch}" fill="${fill}" stroke="none"/>`)
       }
     }
   }
