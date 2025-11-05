@@ -268,13 +268,18 @@ export function buildSVG(params: {
     outH = W
   }
   const hasLabels = Object.keys(xLabels).length > 0 || Object.keys(yLabels).length > 0
+  const outerPad = hasLabels ? 8 : 0
+  const rootW = outW + outerPad * 2
+  const rootH = outH + outerPad * 2
   const bgRect = hasLabels ? `<rect width="100%" height="100%" fill="#ffffff"/>` : ''
   const svg = `<?xml version="1.0" encoding="UTF-8"?>\n` +
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${outW}" height="${outH}" viewBox="0 0 ${outW} ${outH}">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${rootW}" height="${rootH}" viewBox="0 0 ${rootW} ${rootH}">` +
     `${bgRect}` +
-    `<g class="content"${groupTransform}>` +
-      `<g class="cells" fill-opacity="${safeAlpha}">${cellElems.join('')}</g>` +
-      `${labelElems.join('')}` +
+    `<g transform="translate(${outerPad},${outerPad})">` +
+      `<g class="content"${groupTransform}>` +
+        `<g class="cells" fill-opacity="${safeAlpha}">${cellElems.join('')}</g>` +
+        `${labelElems.join('')}` +
+      `</g>` +
     `</g>` +
     `</svg>`
 
