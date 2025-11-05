@@ -31,6 +31,13 @@ RTNPX - 汎用ピクセルSVG生成 API（Next.js）
 - alpha: 0〜1 の不透明度（省略時 1）
 - gap: xGap,yGap をカンマ区切りで指定（省略時 0,0）
 - yGap / xGap: 方向別に個別指定（gap より後勝ち）
+- ラベル（任意・複数の書き方をサポート）
+  - 行（Y）: `row1=ラベル`, `row2=ラベル` ...
+  - 列（X）: `column1=ラベル`, `column2=ラベル` ...
+  - 省略記法: `rows=ラベル1,ラベル2,...` / `columns=ラベル1,ラベル2,...`
+  - 別名: `y=...` / `x=...`, `ylabel=...` / `xlabel=...`
+  - 汎用: `label=y:ラベル1,ラベル2` / `label=x:W1,W2`
+    - 日本語の「の」や全角コロンもOK: `label=yのラベル1,ラベル2`, `label=x：W1,W2`
 
 data の書き方（新記法のみ、エンコード不要）
 - 列区切り: /（スラッシュ）
@@ -53,6 +60,7 @@ data の書き方（新記法のみ、エンコード不要）
 - SVG: http://localhost:3000/r/10/5/10-20/5-12/1-3/8-9
 - HTML: http://localhost:3000/r/10/8/html/4-6_9
 - PNG: http://localhost:3000/r/10/8/png/4-6_9?ogw=1200&ogh=630
+- ラベル付き例: http://localhost:3000/r/10/5/3-5/2-4/1-3?label=yの上,中,下&columns=W1,W2,W3
 
 エラーレスポンス
 - 不正または不足パラメータ時は 400 + エラーメッセージ入り SVG/PNG/HTML を返却

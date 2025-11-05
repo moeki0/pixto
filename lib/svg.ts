@@ -242,13 +242,14 @@ export function buildSVG(params: {
     }
   }
   if (Object.keys(yLabels).length) {
+    const ml = Object.keys(yLabels).length ? 56 : 0
     for (let j = 1; j <= maxY; j++) {
       if (yLabels[j]) {
-        const rx = Math.max(2, (Object.keys(yLabels).length ? 56 : 0) - 6)
-        const ry = py(j) + ch - 4
+        const rx = Math.max(2, ml - 6)
+        const ry = py(j) + ch / 2
         const rotAttr = direction === 'bottom' ? ` transform="rotate(-90 ${rx} ${ry})"` : ''
         labelElems.push(
-          `<text x="${rx}" y="${ry}" text-anchor="start" font-size="12" fill="#334155"${rotAttr}>${escapeXML(String(
+          `<text x="${rx}" y="${ry}" text-anchor="end" dominant-baseline="middle" font-size="12" fill="#334155"${rotAttr}>${escapeXML(String(
             yLabels[j]
           ))}</text>`
         )
@@ -266,8 +267,11 @@ export function buildSVG(params: {
     outW = H
     outH = W
   }
+  const hasLabels = Object.keys(xLabels).length > 0 || Object.keys(yLabels).length > 0
+  const bgRect = hasLabels ? `<rect width="100%" height="100%" fill="#ffffff"/>` : ''
   const svg = `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<svg xmlns="http://www.w3.org/2000/svg" width="${outW}" height="${outH}" viewBox="0 0 ${outW} ${outH}">` +
+    `${bgRect}` +
     `<g class="content"${groupTransform}>` +
       `<g class="cells" fill-opacity="${safeAlpha}">${cellElems.join('')}</g>` +
       `${labelElems.join('')}` +

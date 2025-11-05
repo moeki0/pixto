@@ -1,6 +1,49 @@
 import { ImageResponse } from 'next/og'
 import { buildSVG } from '../../../../../../lib/svg'
 
+function parseAxisLabels(params: URLSearchParams): { yLabels: Record<number, string>; xLabels: Record<number, string> } {
+  const yLabels: Record<number, string> = {}
+  const xLabels: Record<number, string> = {}
+
+  params.forEach((v, k) => {
+    let m: RegExpExecArray | null
+    if ((m = /^row(\d+)$/i.exec(k))) {
+      const idx = Number(m[1])
+      if (idx > 0) yLabels[idx] = v
+    } else if ((m = /^column(\d+)$/i.exec(k))) {
+      const idx = Number(m[1])
+      if (idx > 0) xLabels[idx] = v
+    }
+  })
+
+  const csvToArr = (csv: string) => csv.split(',').map((s) => s.trim()).filter(Boolean)
+  const fillSeq = (arr: string[], target: Record<number, string>) => {
+    arr.forEach((label, i) => {
+      const idx = i + 1
+      if (!(idx in target)) target[idx] = label
+    })
+  }
+  const rows = params.get('rows') || params.get('row') || params.get('ylabel') || params.get('y')
+  if (rows) fillSeq(csvToArr(rows), yLabels)
+  const cols = params.get('columns') || params.get('column') || params.get('xlabel') || params.get('x')
+  if (cols) fillSeq(csvToArr(cols), xLabels)
+
+  const labelParams = params.getAll('label')
+  for (const raw of labelParams) {
+    const s = String(raw)
+    const m = /^(x|y)[：:の](.*)$/.exec(s)
+    if (m) {
+      const axis = m[1]
+      const rest = m[2]
+      const items = csvToArr(rest)
+      if (axis === 'y') fillSeq(items, yLabels)
+      else if (axis === 'x') fillSeq(items, xLabels)
+    }
+  }
+
+  return { yLabels, xLabels }
+}
+
 export const runtime = 'edge'
 
 export async function GET(
@@ -51,7 +94,8 @@ export async function GET(
       }
     })
 
-    const svg = buildSVG({ direction, data, width, height, color, alpha, yGap, xGap, yLabels: {}, xLabels: {}, palette, paletteDefaultKey: defaultKey })
+    const { yLabels, xLabels } = parseAxisLabels(url.searchParams)
+    const svg = buildSVG({ direction, data, width, height, color, alpha, yGap, xGap, yLabels, xLabels, palette, paletteDefaultKey: defaultKey })
     const encoded = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 
     // OGP recommended size: 1200 x 630
