@@ -212,15 +212,27 @@ export function buildSVG(params: {
       for (let yi = r.y0; yi <= r.y1; yi++) {
         const rx = px(xi)
         const ry = py(yi)
-        // Resolve fill color: segment colorLabel > column default > palette default first > fallback
-        let fill = fallbackBase
-        if (r.colorLabel && palResolved[r.colorLabel]) {
-          fill = palResolved[r.colorLabel]
-        } else if (colDef && palResolved[colDef]) {
+        // Resolve fill color priority:
+        // 1) segment colorLabel as palette key
+        // 2) segment colorLabel as direct color token (#rgb, rgb(), named, 0x...)
+        // 3) column default palette key
+        // 4) palette default key (first pal_*)
+        // 5) fallback base color (query `color` or default blue)
+        let fill: string | undefined
+        if (r.colorLabel) {
+          if (palResolved[r.colorLabel]) {
+            fill = palResolved[r.colorLabel]
+          } else {
+            const direct = sanitizeColor(r.colorLabel, '')
+            if (direct) fill = direct
+          }
+        }
+        if (!fill && colDef && palResolved[colDef]) {
           fill = palResolved[colDef]
-        } else if (defaultKey && palResolved[defaultKey]) {
+        } else if (!fill && defaultKey && palResolved[defaultKey]) {
           fill = palResolved[defaultKey]
         }
+        if (!fill) fill = fallbackBase
         cellElems.push(`<rect x="${rx}" y="${ry}" width="${cw}" height="${ch}" fill="${fill}" stroke="none"/>`)
       }
     }
