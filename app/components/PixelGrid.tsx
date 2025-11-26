@@ -121,8 +121,6 @@ export function PixelGrid(props: {
       <div
         style={{
           overflowX: "scroll",
-          width: "calc(100vw - 50px)",
-          height: "340px",
         }}
       >
         <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
