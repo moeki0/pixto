@@ -333,10 +333,18 @@ function EditorApp() {
       if (dataPart.endsWith(".png")) dataPart = dataPart.slice(0, -4);
 
       const pal: Record<string, string> = {};
+      const palEntries: { label: string; color: string }[] = [];
       u.searchParams.forEach((v, k) => {
         const m = /^pal_([A-Za-z][\w-]*)$/.exec(k);
-        if (m) pal[m[1]] = v.startsWith("#") ? v : `#${v}`;
+        if (m) {
+          const color = v.startsWith("#") ? v : `#${v}`;
+          const norm = color.trim().toLowerCase();
+          if (norm === "#2c7be5") return;
+          pal[m[1]] = color;
+          palEntries.push({ label: m[1], color });
+        }
       });
+      const paletteDefaultLabel = palEntries[0]?.label;
 
       const alphaParam = u.searchParams.get("alpha");
       const a = alphaParam != null ? Number(alphaParam) : undefined;
@@ -393,33 +401,38 @@ function EditorApp() {
       );
 
       let maxIndexUsed = 0;
+      // Ensure a default blue exists as a fallback when no palette default is provided
+      const DEFAULT_BLUE = "#2c7be5";
       const paletteTemp: string[] = [...palette];
+      const palIndexMap = new Map<string, number>();
       const ensurePaletteIndex = (idx: number) => {
         while (paletteTemp.length < idx) paletteTemp.push(DEFAULT_BLUE);
       };
 
-      // Ensure a default blue exists for unlabeled segments (align with server default)
-      const DEFAULT_BLUE = "#2c7be5";
-      // Seed c1 as default blue if palette is empty and no explicit c1 param is provided later
-      if (paletteTemp.length === 0) {
-        paletteTemp.push(DEFAULT_BLUE);
-      }
       // Pre-apply pal_* entries to GUI palette (even if not referenced in data)
-      Object.entries(pal).forEach(([label, hex]) => {
+      palEntries.forEach(({ label, color }) => {
+        const hex = color;
         const m = /^c(\d+)$/.exec(label);
         if (m) {
           const idxNum = Number(m[1]);
           ensurePaletteIndex(idxNum);
           paletteTemp[idxNum - 1] = hex;
+          palIndexMap.set(label, idxNum);
         } else {
-          const target = String(hex).trim().toLowerCase();
-          const exists = paletteTemp.some(
+          const target = String(hex || "")
+            .trim()
+            .toLowerCase();
+          let idx = paletteTemp.findIndex(
             (c) =>
               String(c || "")
                 .trim()
-                .toLowerCase() == target
+                .toLowerCase() === target
           );
-          if (!exists) paletteTemp.push(hex);
+          if (idx === -1) {
+            paletteTemp.push(hex);
+            idx = paletteTemp.length - 1;
+          }
+          palIndexMap.set(label, idx + 1);
         }
       });
       const findDefaultIdx = () => {
@@ -428,7 +441,13 @@ function EditorApp() {
         );
         return i >= 0 ? i + 1 : 0; // 1-based palette index or 0 if not found
       };
-      let defaultIndex = findDefaultIdx();
+      let defaultIndex =
+        paletteDefaultLabel != null
+          ? palIndexMap.get(paletteDefaultLabel) || 0
+          : 0;
+      if (defaultIndex === 0) {
+        defaultIndex = findDefaultIdx();
+      }
       if (defaultIndex === 0) {
         paletteTemp.push(DEFAULT_BLUE);
         defaultIndex = paletteTemp.length; // 1-based
@@ -488,11 +507,11 @@ function EditorApp() {
                 paletteTemp[idxNum - 1] = pal[palKey];
               }
             } else {
-              // Non-numeric label is unsupported in editor palette; fall back to default blue
+              // Non-numeric label is unsupported in editor palette; fall back to palette default
               idxNum = defaultIndex;
             }
           } else {
-            // No label provided -> use default blue
+            // No label provided -> use palette default color
             idxNum = defaultIndex;
           }
 
